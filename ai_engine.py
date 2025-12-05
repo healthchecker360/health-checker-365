@@ -6,46 +6,51 @@ import json
 if config.GEMINI_API_KEY:
     genai.configure(api_key=config.GEMINI_API_KEY)
 
-# SYSTEM PROMPT
 SYSTEM_PROMPT = """
 You are Health Checker 365.
-For every question, provide TWO responses:
-1. 👨‍⚕️ CLINICAL VIEW (Technical, Dosing, MOA)
-2. 🏡 PATIENT VIEW (Simple, Home Care, Red Flags)
+Provide:
+1. 👨‍⚕️ CLINICAL VIEW (Technical)
+2. 🏡 PATIENT VIEW (Simple)
 """
 
 def get_hybrid_response(query, image=None, context_data=None):
     if not config.GEMINI_API_KEY:
         return "⚠️ API Key Missing."
 
-    # BUILD PROMPT
+    # --- DYNAMIC MODEL SELECTOR (The Fix) ---
+    # This block asks Google what models are actually available to your key
+    target_model_name = 'gemini-1.5-flash' # Default hope
+    try:
+        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Logic to pick the best available model
+        if 'models/gemini-1.5-flash' in valid_models:
+            target_model_name = 'models/gemini-1.5-flash'
+        elif 'models/gemini-pro' in valid_models:
+            target_model_name = 'models/gemini-pro'
+        elif len(valid_models) > 0:
+            target_model_name = valid_models[0] # Pick the first working model found
+        else:
+            return "⚠️ CRITICAL ERROR: Your API Key has access to 0 models. Please generate a new key at aistudio.google.com"
+            
+    except Exception as e:
+        return f"⚠️ Connection Error: Could not list models. Check if your API Key is valid. Error: {str(e)}"
+
+    # --- GENERATION ---
     full_prompt = query
     if context_data:
         full_prompt = f"Internal Data: {json.dumps(context_data)}. Query: {query}"
 
-    # --- THE BULLETPROOF LOGIC ---
     try:
-        # ATTEMPT 1: Try the latest fast model (Gemini 1.5 Flash)
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
+        # Use the model we found above
+        model = genai.GenerativeModel(target_model_name, system_instruction=SYSTEM_PROMPT)
+        
         if image:
             response = model.generate_content([full_prompt, image])
         else:
             response = model.generate_content(full_prompt)
-        return response.text
-
-    except Exception as e:
-        # ATTEMPT 2: Fallback to the stable legacy model (Gemini 1.0 Pro) if Flash fails
-        try:
-            if image:
-                # Use Vision model for images
-                fallback_model = genai.GenerativeModel('gemini-pro-vision')
-                response = fallback_model.generate_content([full_prompt, image])
-            else:
-                # Use Text model for chat
-                fallback_model = genai.GenerativeModel('gemini-pro')
-                response = fallback_model.generate_content(full_prompt)
-            return response.text
             
-        except Exception as e2:
-            # If both fail, show the error
-            return f"⚠️ System Error: {str(e)}. (Fallback also failed: {str(e2)})"
+        return response.text
+        
+    except Exception as e:
+        return f"⚠️ Final Error using model '{target_model_name}': {str(e)}"
