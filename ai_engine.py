@@ -24,9 +24,8 @@ def get_hybrid_response(query, image=None, context_data=None):
         full_prompt = f"Internal Data: {json.dumps(context_data)}. Query: {query}"
 
     try:
-        # UPDATED: Use 'gemini-1.5-flash-latest' which maps to the newest stable version
-        # If this fails, the code below catches it.
-        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=SYSTEM_PROMPT)
+        # FIXED: Changed back to the standard stable model name
+        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
         
         if image:
             response = model.generate_content([full_prompt, image])
@@ -36,5 +35,4 @@ def get_hybrid_response(query, image=None, context_data=None):
         return response.text
         
     except Exception as e:
-        # Fallback Error Message
-        return f"⚠️ AI Error: {str(e)}. \n\n*Tip: Check that 'Generative Language API' is enabled in your Google Cloud Console.*"
+        return f"⚠️ AI Error: {str(e)}"
