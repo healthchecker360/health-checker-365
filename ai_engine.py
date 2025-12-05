@@ -23,16 +23,29 @@ def get_hybrid_response(query, image=None, context_data=None):
     if context_data:
         full_prompt = f"Internal Data: {json.dumps(context_data)}. Query: {query}"
 
+    # --- THE BULLETPROOF LOGIC ---
     try:
-        # FIXED: Changed back to the standard stable model name
+        # ATTEMPT 1: Try the latest fast model (Gemini 1.5 Flash)
         model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
-        
         if image:
             response = model.generate_content([full_prompt, image])
         else:
             response = model.generate_content(full_prompt)
-            
         return response.text
-        
+
     except Exception as e:
-        return f"⚠️ AI Error: {str(e)}"
+        # ATTEMPT 2: Fallback to the stable legacy model (Gemini 1.0 Pro) if Flash fails
+        try:
+            if image:
+                # Use Vision model for images
+                fallback_model = genai.GenerativeModel('gemini-pro-vision')
+                response = fallback_model.generate_content([full_prompt, image])
+            else:
+                # Use Text model for chat
+                fallback_model = genai.GenerativeModel('gemini-pro')
+                response = fallback_model.generate_content(full_prompt)
+            return response.text
+            
+        except Exception as e2:
+            # If both fail, show the error
+            return f"⚠️ System Error: {str(e)}. (Fallback also failed: {str(e2)})"
