@@ -3,3 +3,5 @@ google-generativeai
 pandas
 pillow
 python-dotenv
+requests
+streamlit-option-menu
