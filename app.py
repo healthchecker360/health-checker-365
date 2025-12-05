@@ -1,175 +1,214 @@
 import streamlit as st
-import config
-import ai_engine
-import medical_data
-import calculators
-import drug_interactions
-import lab
 from PIL import Image
-import json
-import pandas as pd
-import datetime
+import ai_engine
+import config
+import calculators
+import medical_data
 
-# --- PAGE CONFIG ---
+
+# ------------------------------------------------
+#   PAGE SETTINGS
+# ------------------------------------------------
 st.set_page_config(
-    page_title=config.APP_NAME,
+    page_title="Health Checker 365",
     page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# --- CUSTOM CSS ---
+# Global style override (PROFESSIONAL, HIGH VISIBILITY)
 st.markdown("""
-<style>
-body {background-color: #F8F9FA; color: #212121; font-family: 'Arial', sans-serif;}
-h1, h2, h3, h4 {color: #00796B; font-weight: bold;}
-.stButton>button {background-color: #00796B; color: white; border-radius: 10px; padding: 8px 16px; border: none;}
-.stButton>button:hover {background-color: #004D40; color: white;}
-.stSidebar {background-color: #E0F2F1; padding: 20px;}
-.stTextInput>div>div>input, .stNumberInput>div>div>input {border-radius: 8px; border: 1px solid #B0BEC5; padding: 6px;}
-.card {background-color: #FFFFFF; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px;}
-</style>
+    <style>
+        body { background-color: #F8FAFC; }
+        .main-title { color: #0F172A; font-size: 32px; font-weight: 900; }
+        .section-title { color: #1E293B; font-size: 24px; font-weight: 700; margin-top: 20px; }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            color: #0F172A;
+        }
+        .clinical-card { border-left: 6px solid #0EA5E9; }
+        .patient-card { border-left: 6px solid #10B981; }
+    </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+
+# ------------------------------------------------
+#   SIDEBAR
+# ------------------------------------------------
 with st.sidebar:
     st.title("🏥 Health Checker 365")
-    st.write("AI Medical Assistant")
+    st.write("AI-powered clinical & patient-friendly medical support.")
+
     if not config.GEMINI_API_KEY:
-        st.error("⚠️ API Key missing!")
+        st.error("⚠️ Missing Gemini API Key in config.py")
 
     menu = st.radio(
-        "Modules",
-        ["💬 Chat & Diagnosis", "💊 Drug Module", "💉 Drug Interactions",
-         "🧮 Calculators", "📊 Lab Interpretation", "📸 Image Analysis"]
+        "Select Module:",
+        [
+            "💬 Chat & Diagnosis",
+            "💊 Drug Monograph",
+            "🧮 Medical Calculators",
+            "📸 Image Diagnosis"
+        ]
     )
 
-# ========================
-# 1. Chat & Diagnosis
-# ========================
+
+# ========================================================
+# 1️⃣ CHAT & DIAGNOSIS
+# ========================================================
 if menu == "💬 Chat & Diagnosis":
-    st.header("💬 AI Clinical Chat")
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
 
-    for msg in st.session_state.messages:
+    st.markdown("<div class='main-title'>💬 AI Clinical Chat</div>", unsafe_allow_html=True)
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(msg["text"])
 
-    if prompt := st.chat_input("Describe symptoms or medical query..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    if user_input := st.chat_input("Describe symptoms or ask a medical question..."):
+
+        st.session_state.chat_history.append({"role": "user", "text": user_input})
+
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(user_input)
 
         with st.chat_message("assistant"):
-            with st.spinner("AI analyzing..."):
-                res = ai_engine.get_hybrid_response(prompt)
-                st.expander("👨‍⚕️ Clinical View").markdown(res)
-                st.expander("🏡 Patient View").markdown(res)
-        st.session_state.messages.append({"role": "assistant", "content": res})
+            with st.spinner("Analyzing clinically..."):
+                response = ai_engine.get_hybrid_response(user_input)
 
-# ========================
-# 2. Drug Module
-# ========================
-elif menu == "💊 Drug Module":
-    st.header("💊 Drug Information")
-    drug = st.text_input("Enter Drug Name:")
-    if st.button("Search Drug"):
+            # SPLIT INTO TWO CARD SECTIONS
+            st.markdown("<div class='section-title'>🩺 Diagnosis Result</div>", unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
+
+            if "### 👨‍⚕️ Clinical View" in response:
+                clinical = response.split("### 👨‍⚕️ Clinical View")[1].split("### 🏡 Patient View")[0]
+                patient = response.split("### 🏡 Patient View")[1]
+
+                with col1:
+                    st.markdown("<div class='card clinical-card'>", unsafe_allow_html=True)
+                    st.markdown("### 👨‍⚕️ Clinical View")
+                    st.markdown(clinical)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown("<div class='card patient-card'>", unsafe_allow_html=True)
+                    st.markdown("### 🏡 Patient View")
+                    st.markdown(patient)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+            else:
+                st.write(response)
+
+        st.session_state.chat_history.append({"role": "assistant", "text": response})
+
+
+# ========================================================
+# 2️⃣ DRUG MODULE
+# ========================================================
+elif menu == "💊 Drug Monograph":
+
+    st.markdown("<div class='main-title'>💊 Drug Monograph</div>", unsafe_allow_html=True)
+
+    drug = st.text_input("Enter Drug Name")
+
+    if st.button("Search"):
+
         internal_data = medical_data.get_drug_data(drug)
-        if internal_data:
-            st.success("✅ Found in Internal BNF Database")
-        else:
-            st.warning("⚠️ Not found internally. Fetching AI monograph...")
 
         with st.spinner("Generating monograph..."):
-            res = ai_engine.get_hybrid_response(f"Provide dual-view monograph for {drug}.",
-                                                context_data=internal_data)
-            st.markdown(f"<div class='card'>{res}</div>", unsafe_allow_html=True)
-
-# ========================
-# 3. Drug Interactions
-# ========================
-elif menu == "💉 Drug Interactions":
-    st.header("⚠️ Drug Interaction Checker")
-    drugs_input = st.text_area("Enter drugs separated by commas:", placeholder="warfarin, amoxicillin")
-    if st.button("Check Interactions"):
-        drug_list = [d.strip() for d in drugs_input.split(",") if d.strip()]
-        interactions = drug_interactions.check_interactions(drug_list)
-        if interactions:
-            for inter in interactions:
-                st.markdown(
-                    f"<div class='card'>**{inter['drug1'].title()} + {inter['drug2'].title()}** → {inter['severity']}<br>{inter['note']}</div>",
-                    unsafe_allow_html=True
-                )
-        else:
-            st.success("No known interactions found.")
-
-# ========================
-# 4. Calculators
-# ========================
-elif menu == "🧮 Calculators":
-    st.header("🧮 Medical Calculators")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("BMI Calculator")
-        weight = st.number_input("Weight (kg):", 70.0, key="bmi_w")
-        height = st.number_input("Height (cm):", 175.0, key="bmi_h")
-        if st.button("Calculate BMI"):
-            val, cat = calculators.calc_bmi(weight, height)
-            st.markdown(f"<div class='card'><b>BMI:</b> {val} <br><b>Category:</b> {cat}</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.subheader("eGFR Calculator")
-        creatinine = st.number_input("Serum Creatinine (mg/dL):", 1.0, key="egfr_s")
-        age = st.number_input("Age:", 50, key="egfr_a")
-        gender = st.selectbox("Gender:", ["Male", "Female"], key="egfr_g")
-        if st.button("Calculate eGFR"):
-            gfr = calculators.calc_egfr(creatinine, age, gender)
-            st.markdown(f"<div class='card'><b>eGFR:</b> {gfr} mL/min/1.73m²</div>", unsafe_allow_html=True)
-
-# ========================
-# 5. Lab Interpretation
-# ========================
-elif menu == "📊 Lab Interpretation":
-    st.header("📊 Lab Interpretation & Trends")
-    labs_input = st.text_area("Enter lab values in JSON format",
-                              placeholder='{"Hb": 13.5, "WBC": 7000, "Creatinine": 1.1}')
-    if st.button("Analyze Labs"):
-        try:
-            lab_data = json.loads(labs_input)
-            st.markdown(f"<div class='card'>{lab.interpret_lab_values(lab_data)}</div>", unsafe_allow_html=True)
-            
-            # Trend chart for example (single point if no historical data)
-            df = pd.DataFrame([lab_data], index=[datetime.date.today()])
-            st.line_chart(df)
-
-            # AI interpretation
-            analysis = ai_engine.get_hybrid_response(
-                "Interpret lab data clinically and for patient view:", context_data=lab_data
+            output = ai_engine.get_hybrid_response(
+                f"Generate dual-view monograph for {drug}",
+                context_data=internal_data
             )
-            st.expander("👨‍⚕️ Clinical Interpretation").markdown(analysis)
-            st.expander("🏡 Patient Friendly Explanation").markdown(analysis)
 
-        except Exception:
-            st.error("Invalid JSON. Enter valid lab data.")
+        col1, col2 = st.columns(2)
 
-# ========================
-# 6. Image Analysis
-# ========================
-elif menu == "📸 Image Analysis":
-    st.header("📸 AI Visual Analysis")
-    uploaded_file = st.file_uploader("Upload X-Ray, CT, or image", type=['png','jpg','jpeg'])
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", width=400)
+        clinical = output.split("### 👨‍⚕️ Clinical View")[1].split("### 🏡 Patient View")[0]
+        patient = output.split("### 🏡 Patient View")[1]
+
+        with col1:
+            st.markdown("<div class='card clinical-card'>", unsafe_allow_html=True)
+            st.markdown("### 👨‍⚕️ Clinical View")
+            st.markdown(clinical)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("<div class='card patient-card'>", unsafe_allow_html=True)
+            st.markdown("### 🏡 Patient View")
+            st.markdown(patient)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ========================================================
+# 3️⃣ CALCULATORS
+# ========================================================
+elif menu == "🧮 Medical Calculators":
+
+    st.markdown("<div class='main-title'>🧮 Medical Calculators</div>", unsafe_allow_html=True)
+
+    tab1, tab2 = st.tabs(["BMI", "eGFR"])
+
+    # BMI
+    with tab1:
+        st.markdown("<div class='section-title'>BMI Calculator</div>", unsafe_allow_html=True)
+        w = st.number_input("Weight (kg)", 10.0)
+        h = st.number_input("Height (cm)", 50.0)
+
+        if st.button("Calculate BMI"):
+            val, cat = calculators.calc_bmi(w, h)
+            st.success(f"BMI: {val} — {cat}")
+
+    # eGFR
+    with tab2:
+        st.markdown("<div class='section-title'>eGFR Calculator</div>", unsafe_allow_html=True)
+        s = st.number_input("Serum Creatinine (mg/dL)", 0.1)
+        age = st.number_input("Age", 1)
+        gender = st.selectbox("Gender", ["Male", "Female"])
+
+        if st.button("Calculate eGFR"):
+            egfr = calculators.calc_egfr(s, age, gender)
+            st.success(f"Estimated GFR: {egfr} mL/min")
+
+
+# ========================================================
+# 4️⃣ IMAGE ANALYSIS
+# ========================================================
+elif menu == "📸 Image Diagnosis":
+
+    st.markdown("<div class='main-title'>📸 Medical Image Diagnosis</div>", unsafe_allow_html=True)
+
+    upload = st.file_uploader("Upload X-ray / Skin lesion / Scan", type=["jpg", "png", "jpeg"])
+
+    if upload:
+        img = Image.open(upload)
+        st.image(img, width=350)
+
         if st.button("Analyze Image"):
-            with st.spinner("Analyzing image..."):
-                res = ai_engine.get_hybrid_response("Analyze this image medically.", image=image)
-                st.expander("👨‍⚕️ Clinical View").markdown(res)
-                st.expander("🏡 Patient View").markdown(res)
 
-# ========================
-# FOOTER
-# ========================
-st.markdown("<hr><p style='text-align:center;color:#757575;'>Health Checker 365 © 2025 | Powered by AI</p>", unsafe_allow_html=True)
+            with st.spinner("Analyzing medically..."):
+                result = ai_engine.get_hybrid_response(
+                    "Analyze this medical image and give findings.",
+                    image=img
+                )
+
+            col1, col2 = st.columns(2)
+
+            clinical = result.split("### 👨‍⚕️ Clinical View")[1].split("### 🏡 Patient View")[0]
+            patient = result.split("### 🏡 Patient View")[1]
+
+            with col1:
+                st.markdown("<div class='card clinical-card'>", unsafe_allow_html=True)
+                st.markdown("### 👨‍⚕️ Clinical View")
+                st.markdown(clinical)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            with col2:
+                st.markdown("<div class='card patient-card'>", unsafe_allow_html=True)
+                st.markdown("### 🏡 Patient View")
+                st.markdown(patient)
+                st.markdown("</div>", unsafe_allow_html=True)
