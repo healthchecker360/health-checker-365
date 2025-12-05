@@ -10,8 +10,8 @@ if config.GEMINI_API_KEY:
 SYSTEM_PROMPT = config.SYSTEM_PROMPT if hasattr(config, "SYSTEM_PROMPT") else """
 You are Health Checker 365.
 Provide:
-1. 👨‍⚕️ CLINICAL VIEW (Technical)
-2. 🏡 PATIENT VIEW (Simple)
+1. 🏡 PATIENT VIEW (Simple)
+2. 👨‍⚕️ CLINICAL VIEW (Technical)
 """
 
 def get_hybrid_response(
