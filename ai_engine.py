@@ -1,56 +1,60 @@
 import google.generativeai as genai
 import config
 import json
+from typing import Optional, Union
 
 # Configure Gemini
 if config.GEMINI_API_KEY:
     genai.configure(api_key=config.GEMINI_API_KEY)
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = config.SYSTEM_PROMPT if hasattr(config, "SYSTEM_PROMPT") else """
 You are Health Checker 365.
 Provide:
 1. 👨‍⚕️ CLINICAL VIEW (Technical)
 2. 🏡 PATIENT VIEW (Simple)
 """
 
-def get_hybrid_response(query, image=None, context_data=None):
+def get_hybrid_response(
+    query: str,
+    image: Optional[Union[str, bytes]] = None,
+    context_data: Optional[dict] = None
+) -> str:
     if not config.GEMINI_API_KEY:
         return "⚠️ API Key Missing."
 
-    # --- DYNAMIC MODEL SELECTOR (The Fix) ---
-    # This block asks Google what models are actually available to your key
-    target_model_name = 'gemini-1.5-flash' # Default hope
+    # --- Dynamic Model Selection ---
+    target_model_name = "gemini-1.5-flash"
     try:
-        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Logic to pick the best available model
-        if 'models/gemini-1.5-flash' in valid_models:
-            target_model_name = 'models/gemini-1.5-flash'
-        elif 'models/gemini-pro' in valid_models:
-            target_model_name = 'models/gemini-pro'
-        elif len(valid_models) > 0:
-            target_model_name = valid_models[0] # Pick the first working model found
+        valid_models = [
+            m.name for m in genai.list_models() 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        if "models/gemini-1.5-flash" in valid_models:
+            target_model_name = "models/gemini-1.5-flash"
+        elif "models/gemini-pro" in valid_models:
+            target_model_name = "models/gemini-pro"
+        elif valid_models:
+            target_model_name = valid_models[0]
         else:
-            return "⚠️ CRITICAL ERROR: Your API Key has access to 0 models. Please generate a new key at aistudio.google.com"
-            
+            return "⚠️ CRITICAL ERROR: No available models for this API key."
     except Exception as e:
-        return f"⚠️ Connection Error: Could not list models. Check if your API Key is valid. Error: {str(e)}"
+        return f"⚠️ Connection Error: {str(e)}"
 
-    # --- GENERATION ---
+    # --- Prepare Prompt ---
     full_prompt = query
     if context_data:
-        full_prompt = f"Internal Data: {json.dumps(context_data)}. Query: {query}"
+        try:
+            full_prompt = f"Internal Data: {json.dumps(context_data)}. Query: {query}"
+        except Exception:
+            full_prompt = query  # fallback if context_data is not serializable
 
+    # --- Generate Response ---
     try:
-        # Use the model we found above
         model = genai.GenerativeModel(target_model_name, system_instruction=SYSTEM_PROMPT)
-        
         if image:
             response = model.generate_content([full_prompt, image])
         else:
             response = model.generate_content(full_prompt)
-            
-        return response.text
-        
+        return getattr(response, "text", str(response))
     except Exception as e:
-        return f"⚠️ Final Error using model '{target_model_name}': {str(e)}"
+        return f"⚠️ Model Error '{target_model_name}': {str(e)}"
